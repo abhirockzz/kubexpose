@@ -1,0 +1,11 @@
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: kubexposes.abhirockzz.com
+spec:
+  group: abhirockzz.com
+  version: v1
+  names:
+    kind: Kubexpose
+    plural: kubexposes
+  scope: Namespaced
