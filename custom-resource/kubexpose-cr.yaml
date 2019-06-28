@@ -1,7 +1,7 @@
 apiVersion: abhirockzz.com/v1
 kind: Kubexpose
 metadata:
-  name: kubexpose-nginx6
+  name: kubexpose-nginx
 spec:
   serviceName: nginx-service
   port: 80

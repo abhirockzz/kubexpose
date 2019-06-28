@@ -197,6 +197,7 @@ func createDeployment(ke *kubexposev1.Kubexpose) {
 	label := deploymentName
 	port := strings.Split(deploymentName, "-")[1]
 	numReplicas := int32(1)
+	ngrokPort := int32(4040)
 	ngrokDeployment := &appsv1.Deployment{
 		ObjectMeta: meta_v1.ObjectMeta{
 			Name:      deploymentName,
@@ -225,7 +226,7 @@ func createDeployment(ke *kubexposev1.Kubexpose) {
 							Image:   "wernight/ngrok",
 							Command: []string{"ngrok"},
 							Args:    []string{"http", ke.Spec.ServiceName + ":" + port},
-							Ports:   []corev1.ContainerPort{corev1.ContainerPort{ContainerPort: 4040}},
+							Ports:   []corev1.ContainerPort{corev1.ContainerPort{ContainerPort: ngrokPort}},
 						},
 					},
 				},

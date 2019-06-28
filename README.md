@@ -6,6 +6,14 @@ An Operator example based on [Expose Kubernetes services with ngrok](https://med
 
 > Thanks to [Extending Kubernetes: Create Controllers for Core and Custom Resources](https://medium.com/@trstringer/create-kubernetes-controllers-for-core-and-custom-resources-62fc35ad64a3)
 
+## Pre-requisites
+
+1. Make sure that the `config` file in `$HOME/.kube/config` points to the Kubernetes cluster against which you want to test this out
+
+> this could be anything like minikube, K8s on Docker for Mac, GKE, AKS etc.
+
+2. You have Go installed
+
 ## Steps
 
 Clone the repo and change to directory
@@ -17,7 +25,7 @@ Build the operator binary
 
     go build -o kubexpose-operator
 
-Seed the CRD
+Seed the `Kubexpose` CRD (Custom Resource Definition)
 
     kubectl apply -f crd/kubexpose.yaml
 
@@ -27,7 +35,7 @@ Start operator
 
 ## Test drive
 
-Create nginx deploymeny and service for testing
+Create `nginx` Deployment and Service for testing
 
     kubectl create -f app/app.yaml 
 
@@ -35,9 +43,9 @@ Create `kubexpose` resource
 
     kubectl apply -f custom-resource/kubexpose-cr.yaml 
 
-You should see a new `Deployment` called `nginx-service-80` - check logs to confirm. Now search for the Pod
+You should see a new Deployment named `kubexpose-nginx` - check logs to confirm. Now search for the Pod
 
-    kubectl exec $(kubectl get pods -l=app=nginx-service-80 -o=jsonpath='{.items[0].metadata.name}') -- curl http://localhost:4040/api/tunnels
+    kubectl exec $(kubectl get pods -l=app=kubexpose-nginx -o=jsonpath='{.items[0].metadata.name}') -- curl http://localhost:4040/api/tunnels
 
 You will get a JSON output such as
 
