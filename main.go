@@ -6,7 +6,7 @@ import (
 	kubexposeclientset "kubexpose/pkg/client/clientset/versioned"
 	kubexposeinformer "kubexpose/pkg/client/informers/externalversions/kubexpose/v1"
 	kubexposev1lister "kubexpose/pkg/client/listers/kubexpose/v1"
-	"strconv"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -86,7 +86,7 @@ func (p processor) process() {
 		if quit {
 			log.Info("processing halted")
 		}
-		defer p.q.Done(key)
+		//defer p.q.Done(key)
 		keyRaw := key.(string)
 		_, exists, err := p.i.GetIndexer().GetByKey(keyRaw)
 
@@ -97,24 +97,27 @@ func (p processor) process() {
 			} else {
 				log.Errorf("Controller.processNextItem: Failed processing item with key %s with error %v, no more retries", key, err)
 				p.q.Forget(key)
+				p.q.Done(key)
 				utilruntime.HandleError(err)
 			}
 		}
 
+		_, name, err := cache.SplitMetaNamespaceKey(keyRaw)
+		if err != nil {
+			utilruntime.HandleError(fmt.Errorf("invalid resource key: %s", key))
+			return
+		}
+
 		if !exists {
 			log.Infof("Controller.processNextItem: kubexpose deleted detected: %s", keyRaw)
-			log.Info("will delete corresponding ngrok deployment ")
+			deleteDeployment(name)
 			p.q.Forget(key)
+			p.q.Done(key)
 		} else {
 			log.Infof("Controller.processNextItem: kubexpose created detected: %s", keyRaw)
 
-			// Get the Foo resource with this namespace/name
+			// Get the Kubexpose resource with this namespace/name
 			lister := kubexposev1lister.NewKubexposeLister(p.i.GetIndexer())
-			_, name, err := cache.SplitMetaNamespaceKey(keyRaw)
-			if err != nil {
-				utilruntime.HandleError(fmt.Errorf("invalid resource key: %s", key))
-				return
-			}
 
 			log.Info("trying to list kubexpose resource for ", name)
 
@@ -123,15 +126,16 @@ func (p processor) process() {
 				// The Foo resource may no longer exist, in which case we stop
 				// processing.
 				if errors.IsNotFound(err) {
-					utilruntime.HandleError(fmt.Errorf("foo '%s' in work queue no longer exists", key))
+					utilruntime.HandleError(fmt.Errorf("Kubexpose '%s' in work queue no longer exists", key))
 					return
 				}
 
 				return
 			}
-			log.Info("will create corresponding ngrok deployment ")
+
 			createDeployment(kubexposeResource)
 			p.q.Forget(key)
+			p.q.Done(key)
 		}
 
 		//time.Sleep(10 * time.Second)
@@ -164,24 +168,41 @@ func (k kubexposehandler) OnUpdate(oldObj, newObj interface{}) {
 func (k kubexposehandler) OnDelete(obj interface{}) {
 	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 	log.Infof("Delete kubexpose: %s", key)
-	if err == nil {
-		k.q.Add(key)
+	if err != nil {
+		log.Error("OnDelete handler ", err)
+
 	}
+	k.q.Add(key)
 }
 
-const crd_Kind = "Kubexpose"
+const crdKind = "Kubexpose"
 
+func deleteDeployment(deploymentName string) {
+	log.Info("deleting deployment ", deploymentName)
+
+	err := k8sClient.AppsV1().Deployments("default").Delete(deploymentName, &meta_v1.DeleteOptions{})
+
+	if err != nil {
+		log.Error("failed to delete deployment ", err)
+		return
+	}
+
+	log.Info("deleted deployment successfully ", deploymentName)
+
+}
 func createDeployment(ke *kubexposev1.Kubexpose) {
-	port := strconv.Itoa(int(*ke.Spec.Port))
-	label := ke.Spec.ServiceName + "-" + port
-	ngrokDeploymentName := label
+
+	deploymentName := ke.ObjectMeta.Name
+	log.Infof("createing deployment named: %s", deploymentName)
+	label := deploymentName
+	port := strings.Split(deploymentName, "-")[1]
 	numReplicas := int32(1)
 	ngrokDeployment := &appsv1.Deployment{
 		ObjectMeta: meta_v1.ObjectMeta{
-			Name:      ngrokDeploymentName,
+			Name:      deploymentName,
 			Namespace: "default",
 			OwnerReferences: []meta_v1.OwnerReference{
-				*meta_v1.NewControllerRef(ke, kubexposev1.SchemeGroupVersion.WithKind(crd_Kind)),
+				*meta_v1.NewControllerRef(ke, kubexposev1.SchemeGroupVersion.WithKind(crdKind)),
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -214,7 +235,7 @@ func createDeployment(ke *kubexposev1.Kubexpose) {
 
 	deployment, err := k8sClient.AppsV1().Deployments("default").Create(ngrokDeployment)
 	if err != nil {
-		log.Error("unable to create deployment", ngrokDeploymentName)
+		log.Error("unable to create deployment ", err)
 		return
 	}
 
